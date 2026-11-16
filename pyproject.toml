@@ -1,0 +1,13 @@
+[project]
+name = "kestrel"
+version = "0.1.0"
+description = "A verified, benchmarked PyTorch training and inference pipeline: mixed precision, gradient checkpointing, KV-cache decoding, and int8 quantization, each proven equivalent before it is measured."
+requires-python = ">=3.10"
+dependencies = ["torch>=2.2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "tests"]
+testpaths = ["tests"]
