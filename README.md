@@ -16,7 +16,25 @@ python -m kestrel.bench --run runs/shakespeare    # speed, memory, KV cache, int
 python -m kestrel.report --run runs/shakespeare   # writes RESULTS.md
 ```
 
-The default model has about 0.8M parameters (4 layers, 4 heads, d=128, context 128) and trains for 3,000 steps on character-level TinyShakespeare. On a typical laptop CPU that takes roughly 10–20 minutes.
+The default model has 826K parameters (4 layers, 4 heads, d=128, context 128) and trains for 3,000 steps on character-level TinyShakespeare. On the 2-thread laptop CPU used for [RESULTS.md](RESULTS.md), training took about 43 minutes and the benchmarks about 15. Faster CPUs will finish sooner.
+
+## Headline results
+
+Measured on a 2-thread laptop CPU. Full tables are in [RESULTS.md](RESULTS.md).
+
+| Technique | Effect | Equivalence check |
+|---|---|---|
+| Training | **1.58** validation loss (perplexity 4.86) on held-out text | Bitwise-reproducible from the seed |
+| KV cache | **2.8x** faster generation | Token-for-token identical output |
+| Gradient checkpointing | **6.3x** less activation memory (133.6 → 21.1 MB), 14% slower step | Identical loss and gradients |
+| Int8 quantization | **3.5x** smaller model (3.15 → 0.90 MB) | Validation loss +0.0004 |
+| bf16 autocast | 42% less activation memory, but **16.5x slower** step | Loss within 2% of fp32 |
+
+### Finding: mixed precision is a hardware decision, not a default
+
+bf16 is usually described as a free speedup. On this CPU it made each training step **16.5x slower** (719 ms → 11,879 ms) while saving 42% of activation memory. The CPU has no native bfloat16 arithmetic, so the low-precision math is emulated, and the cost of converting values back and forth far outweighs the memory savings. On GPUs, or on CPUs with native bf16 support (e.g. AVX-512 BF16 or AMX), the same code is expected to speed up. The lesson: measure on the target hardware before assuming an optimization helps.
+
+The same benchmark shows the opposite trade for int8: weight-only quantization makes the model 3.5x smaller with negligible quality loss, but the forward pass is 7% *slower* (57 → 61 ms), because weights are dequantized on every call. Int8 here saves storage and memory bandwidth, not compute. A real speedup would need int8 matrix-multiply kernels.
 
 ## What's inside
 
