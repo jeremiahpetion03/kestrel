@@ -101,7 +101,9 @@ def train(cfg: TrainConfig, out: Path | None = None, text_path: Path | None = No
     device = resolve_device(cfg.device)
 
     path = Path(text_path or cfg.data)
-    if not path.exists() and str(path) == DEFAULT_DATA:
+    # Compare Path objects, not strings: on Windows str(path) uses backslashes
+    # and would never equal the forward-slash default.
+    if not path.exists() and path == Path(DEFAULT_DATA):
         download_tinyshakespeare(path)
     tok, train_data, val_data = load_splits(path)
 
