@@ -40,7 +40,7 @@ class TrainConfig:
     warmup: int = 100
     weight_decay: float = 0.1
     clip: float = 1.0
-    precision: str = "fp32"  # fp32 | bf16
+    precision: str = "fp32"  # fp32 | bf16 | fp16
     grad_checkpoint: bool = False
     eval_every: int = 250
     eval_batches: int = 20
@@ -61,6 +61,8 @@ def autocast_ctx(device: torch.device, precision: str):
         return nullcontext()
     if precision == "bf16":
         return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    if precision == "fp16":
+        return torch.autocast(device_type=device.type, dtype=torch.float16)
     raise ValueError(f"unknown precision {precision!r}")
 
 
@@ -91,7 +93,27 @@ def estimate_loss(model: GPT, data: torch.Tensor, cfg: TrainConfig, device: torc
 def resolve_device(name: str) -> torch.device:
     if name == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(name)
+    device = torch.device(name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA requested but not available: install the CUDA build of PyTorch "
+            "(see README, 'Running on an NVIDIA GPU')")
+    return device
+
+
+def hardware_info(device: torch.device) -> dict:
+    """What the numbers were measured on, recorded with every run."""
+    info = {"device": str(device), "cpu": platform.processor() or platform.machine()}
+    if device.type == "cuda":
+        props = torch.cuda.get_device_properties(device)
+        info.update({
+            "gpu": props.name,
+            "gpu_memory_gb": round(props.total_memory / 2**30, 1),
+            "compute_capability": f"{props.major}.{props.minor}",
+            "cuda": torch.version.cuda,
+            "bf16_supported": torch.cuda.is_bf16_supported(),
+        })
+    return info
 
 
 def train(cfg: TrainConfig, out: Path | None = None, text_path: Path | None = None, verbose: bool = True) -> dict:
@@ -112,13 +134,16 @@ def train(cfg: TrainConfig, out: Path | None = None, text_path: Path | None = No
     model.grad_checkpointing = cfg.grad_checkpoint
     opt = make_optimizer(model, cfg)
     g = torch.Generator().manual_seed(cfg.seed + 1)  # data order, independent of init
+    # fp16 needs loss scaling or small gradients underflow to zero; a disabled
+    # scaler is a no-op, so fp32 and bf16 run exactly as before.
+    scaler = torch.amp.GradScaler(device.type, enabled=cfg.precision == "fp16")
 
     if out is not None:
         out.mkdir(parents=True, exist_ok=True)
         meta = {
             "train": asdict(cfg), "model": mcfg.to_dict(), "num_params": model.num_params(),
             "torch": torch.__version__, "python": platform.python_version(),
-            "threads": torch.get_num_threads(), "device": str(device),
+            "threads": torch.get_num_threads(), **hardware_info(device),
             "train_tokens": len(train_data), "val_tokens": len(val_data),
         }
         (out / "config.json").write_text(json.dumps(meta, indent=2))
@@ -136,11 +161,13 @@ def train(cfg: TrainConfig, out: Path | None = None, text_path: Path | None = No
         with autocast_ctx(device, cfg.precision):
             _, loss, _ = model(x.to(device), y.to(device))
         opt.zero_grad(set_to_none=True)
-        loss.backward()
+        scaler.scale(loss).backward()
+        scaler.unscale_(opt)  # clip true gradients, not scaled ones
         gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.clip).item()
-        if not math.isfinite(gnorm):
+        if not math.isfinite(gnorm) and not scaler.is_enabled():
             raise FloatingPointError(f"non-finite gradient norm at step {step}")
-        opt.step()
+        scaler.step(opt)  # with fp16, skips the step on overflow and lowers the scale
+        scaler.update()
         losses.append(loss.item())
 
         last = step == cfg.steps - 1

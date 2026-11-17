@@ -49,6 +49,11 @@ class CausalSelfAttention(nn.Module):
         Tk = k.size(2)
         if Tk == T:
             y = F.scaled_dot_product_attention(q, k, v, dropout_p=p, is_causal=True)
+        elif T == 1:
+            # One new token may attend to every cached key: no mask needed.
+            # Building an all-True mask here cost two extra kernel launches per
+            # layer per decoded token, which dominates on a GPU at batch size 1.
+            y = F.scaled_dot_product_attention(q, k, v, dropout_p=p)
         else:
             # The T queries are the last T of Tk positions, so query i may
             # attend to keys 0 .. (Tk - T + i). True = allowed.

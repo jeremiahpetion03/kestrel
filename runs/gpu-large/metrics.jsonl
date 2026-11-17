@@ -1,0 +1,3 @@
+{"step": 0, "train_loss": 4.22321, "grad_norm": 27.13019, "lr": 1e-05, "val_loss": 3.80613}
+{"step": 250, "train_loss": 1.84595, "grad_norm": 0.88877, "lr": 0.0007222075445642904, "val_loss": 1.97054}
+{"step": 499, "train_loss": 1.4509, "grad_norm": 0.68445, "lr": 0.00010001387905984466, "val_loss": 1.66056}
