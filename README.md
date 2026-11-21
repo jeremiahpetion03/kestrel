@@ -48,11 +48,11 @@ On CUDA the benchmark adds an fp16 row (with loss scaling) and reports peak GPU 
 | bf16 vs fp32 (training step) | 16.5x **slower** | 1.25x **slower** | **2.45x faster** |
 | fp16 vs fp32 (training step) | n/a | 1.31x **slower** | **2.33x faster** |
 | Gradient checkpointing | 6.3x less activation memory, +14% time | 2.3x less peak GPU memory, **+70%** time | 3.0x less peak GPU memory, **+22%** time |
-| KV cache (batch 1) | **2.8x faster** | 0.8x\* | 0.93x |
-| KV cache (batch 32) | | | **3.09x faster** |
+| KV cache (batch 1) | **2.8x faster** | 0.94x\* | 0.93x |
+| KV cache (batch 32) | | 0.93x\* | **3.09x faster** |
 | Int8 weight-only | 3.5x smaller, +0.0004 val loss | 3.5x smaller, +0.0004 val loss | 3.9x smaller, −0.00004 val loss |
 
-\*From an earlier run that has no batch-size sweep data. It likely predates the attention-mask fix described below (which made batch-1 cached decoding 23% faster at 25.4M params) and has not been re-measured.
+\*Re-measured after the attention-mask fix described below ([`runs/gpu-recheck`](runs/gpu-recheck)). The first 826K run, made before the fix, measured 0.8x; under the same conditions (16-token prompt, 112 new tokens) cached decoding rose from 124 to 150 tokens/s (+21%) while uncached moved 155 to 160 (+3%), so the gain came from the fix. The same-seed retrain reproduced the validation loss exactly (1.58168).
 
 Every row passed its equivalence check first: identical tokens with and without the cache, identical loss and gradients with checkpointing, and bf16/fp16 loss within 2% of fp32. Full tables: [RESULTS.md](RESULTS.md) (CPU), [RESULTS_GPU.md](RESULTS_GPU.md), [RESULTS_GPU_LARGE.md](RESULTS_GPU_LARGE.md).
 
@@ -63,7 +63,7 @@ My first GPU prediction was wrong. I expected bf16 to turn the CPU's 16.5x slowd
 I tested that by changing one variable at a time:
 
 1. **Scale the model 31x** (d=512, 8 layers, 25.4M parameters). bf16 went from 1.25x slower to **2.45x faster**, and checkpointing's time cost fell from +70% to +22%: once arithmetic dominates, both behave as they do at production scale.
-2. **Scale the generation batch** for the KV cache. Speedup grew from **0.93x (batch 1) to 1.05x (batch 8) to 3.09x (batch 32)**, with identical output at every size. At batch 1 each decode step is a few tiny kernels either way, so the arithmetic the cache saves is hidden behind launch overhead. Larger batches make each step compute-bound and expose it.
+2. **Scale the generation batch** for the KV cache. At 25.4M parameters, speedup grew from **0.93x (batch 1) to 1.05x (batch 8) to 3.09x (batch 32)**, with identical output at every size. At batch 1 each decode step is a few tiny kernels either way, so the arithmetic the cache saves is hidden behind launch overhead. Larger batches make each step compute-bound and expose it. Batch size alone isn't enough, though: at 826K parameters the cache stays below 1x even at batch 32 (0.94x, 0.96x, 0.93x at batch 1, 8, 32), because with 128-wide layers and a 128-token context each step is still too small to be compute-bound. The cache pays off only when both the model and the batch are large enough.
 3. **Profiling the cache path** turned up a real inefficiency: every single-token decode step built an all-True attention mask, two extra kernel launches per layer per token. Removing it made batch-1 cached generation **23% faster** (66 → 81 tokens/s).
 
 On the CPU the cache was 2.8x faster even at batch 1, because the CPU is compute-bound at this size. Same code, opposite conclusions. That's why the benchmark records the hardware with every run.

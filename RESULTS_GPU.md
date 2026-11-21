@@ -35,6 +35,8 @@ Hardware: NVIDIA GeForce RTX 3060 (12.0 GB, compute capability 8.6, CUDA 13.4). 
 | KV cache | 905.17 | 124 |
 | **Speedup** | **0.8x** | |
 
+This table predates the attention-mask fix. Re-measured after it (`runs/gpu-recheck`, same 16-token prompt and 112 new tokens): KV cache 150 tokens/s vs 160 recompute, **0.94x** at batch 1; 0.96x at batch 8; 0.93x at batch 32. See the README for why a model this small stays launch-bound.
+
 ## Int8 weight-only quantization
 
 | | fp32 | int8 |
