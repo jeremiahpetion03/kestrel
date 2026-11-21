@@ -35,6 +35,8 @@ Hardware: NVIDIA GeForce RTX 3060 (12.0 GB, compute capability 8.6, CUDA 13.4). 
 | KV cache | 3628.6 | 66 |
 | **Speedup** | **0.77x** | |
 
+This table was measured **before** the attention-mask fix (66 tokens/s). The batch-size sweep below was measured **after** it: batch 1 reached 81 tokens/s, a 0.93x speedup.
+
 ### KV-cache speedup by batch size
 
 | Batch | Recompute (tokens/s) | KV cache (tokens/s) | Speedup | Identical output |

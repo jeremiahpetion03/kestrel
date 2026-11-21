@@ -48,9 +48,11 @@ On CUDA the benchmark adds an fp16 row (with loss scaling) and reports peak GPU 
 | bf16 vs fp32 (training step) | 16.5x **slower** | 1.25x **slower** | **2.45x faster** |
 | fp16 vs fp32 (training step) | n/a | 1.31x **slower** | **2.33x faster** |
 | Gradient checkpointing | 6.3x less activation memory, +14% time | 2.3x less peak GPU memory, **+70%** time | 3.0x less peak GPU memory, **+22%** time |
-| KV cache (batch 1) | **2.8x faster** | 0.8x | 0.93x |
+| KV cache (batch 1) | **2.8x faster** | 0.8x\* | 0.93x |
 | KV cache (batch 32) | | | **3.09x faster** |
 | Int8 weight-only | 3.5x smaller, +0.0004 val loss | 3.5x smaller, +0.0004 val loss | 3.9x smaller, −0.00004 val loss |
+
+\*From an earlier run that has no batch-size sweep data. It likely predates the attention-mask fix described below (which made batch-1 cached decoding 23% faster at 25.4M params) and has not been re-measured.
 
 Every row passed its equivalence check first: identical tokens with and without the cache, identical loss and gradients with checkpointing, and bf16/fp16 loss within 2% of fp32. Full tables: [RESULTS.md](RESULTS.md) (CPU), [RESULTS_GPU.md](RESULTS_GPU.md), [RESULTS_GPU_LARGE.md](RESULTS_GPU_LARGE.md).
 
