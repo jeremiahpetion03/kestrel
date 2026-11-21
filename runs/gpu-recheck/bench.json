@@ -1,0 +1,25 @@
+{
+  "generation_sweep": [
+    {
+      "batch": 1,
+      "uncached_tokens_per_sec": 160,
+      "cached_tokens_per_sec": 150,
+      "speedup": 0.94,
+      "identical_output": true
+    },
+    {
+      "batch": 8,
+      "uncached_tokens_per_sec": 1218,
+      "cached_tokens_per_sec": 1172,
+      "speedup": 0.96,
+      "identical_output": true
+    },
+    {
+      "batch": 32,
+      "uncached_tokens_per_sec": 4950,
+      "cached_tokens_per_sec": 4612,
+      "speedup": 0.93,
+      "identical_output": true
+    }
+  ]
+}
